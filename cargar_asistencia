@@ -1,0 +1,330 @@
+import tkinter as tk
+from tkinter import ttk
+from tkinter import StringVar
+from tkinter import IntVar
+from datetime import datetime, timedelta
+from tkcalendar import DateEntry
+import mysql.connector
+from tkinter import messagebox
+from tkcalendar import DateEntry
+from PIL import Image
+
+ventana = tk.Tk()
+ventana.title("Cargar Asistencia de Alumnos")
+ventana.geometry("1200x600")
+ventana.state("zoomed")
+
+Numlegajo = IntVar().get()
+Fecha = StringVar().get()
+hora_entrada = IntVar().get()
+hora_llegada = StringVar().get()
+llegada_tarde = StringVar().get()
+just= StringVar().get()
+tipo_just= StringVar().get()
+retiro= StringVar().get()
+
+# Función para calcular inasistencia basada en el retraso
+def calcular_inasistencia(hora_entrada, hora_llegada):
+    formato = "%H:%M"  # Formato de hora
+    entrada = datetime.strptime(hora_entrada, formato)
+    llegada = datetime.strptime(hora_llegada, formato)
+    diferencia = (llegada - entrada).total_seconds() / 60  # Diferencia en minutos
+
+    if diferencia <= 5:
+        return "Presente"
+    elif 5 < diferencia <= 20:
+        return "1/4 Inasistencia"
+    else:
+        return "Inasistencia Completa"
+
+def reiniciar():
+    Legajo.delete(0, tk.END)
+    Fecha.set_date(datetime.now())
+    hora_entrada1.set("")
+    hora_llegada1.set("")
+    llegada_tarde1.set("")
+    just1.set("")
+    tipo_just1.delete(0, tk.END)
+    entry_horario.delete(0, tk.END)
+
+def cargar():
+    # Obtener los valores de los campos
+    num_legajo = Legajo.get()
+    fecha = Fecha.get()
+    hora_entrada = hora_entrada1.get()
+    hora_llegada = hora_llegada1.get()
+    llegada_tarde = llegada_tarde1.get()
+    justificado = just1.get()
+    tipo_justificacion = tipo_just1.get()
+    retiro = entry_horario.get()
+
+    # Validar que no falten datos
+    if not all([num_legajo, fecha, hora_entrada, hora_llegada, justificado, tipo_justificacion, retiro]):
+        messagebox.showerror("Error", "Por favor, complete todos los campos antes de cargar.")
+        return
+
+    # Calcular el estado de inasistencia basado en la hora de llegada
+    try:
+        inasistencia = calcular_inasistencia(hora_entrada, hora_llegada)
+    except ValueError:
+        messagebox.showerror("Error", "Formato de hora inválido. Use el formato HH:MM.")
+        return
+
+    # Insertar los datos en el Treeview
+    tvtAgregaralumnos.insert(
+        "", "end", 
+        values=(tvtAgregaralumnos.get_children().__len__() + 1,  # ID (incremental)
+                num_legajo, fecha, hora_entrada, hora_llegada, 
+                llegada_tarde, justificado, tipo_justificacion, retiro, inasistencia)
+    )
+
+    # Mostrar un mensaje de éxito
+    messagebox.showinfo("Éxito", "Datos cargados correctamente.")
+
+    # Limpiar los campos después de cargar
+    reiniciar()
+
+
+def volver():
+    ventana.quit()
+
+def validate_integer_input(P):
+    if P == "" or P.isdigit():
+        return True
+    return False   
+
+def validar_horario(horario):
+    try:
+        hora = datetime.strptime(horario, "%H:%M")
+    except ValueError:
+        return False
+    
+    hora_inicio = datetime.strptime("07:45", "%H:%M")
+    hora_fin = datetime.strptime("21:50", "%H:%M")
+    
+    return hora_inicio <= hora <= hora_fin
+
+# Función para validar el contenido del campo, permitiendo solo números y ':'
+def solo_numeros(event):
+    texto = entry_horario.get()
+
+    # Permitir siempre la eliminación (Backspace)
+    if event.char == '\x08':  # 'BackSpace' tiene el código '\x08'
+        return
+
+    # Validar que solo se puedan ingresar números y el ':'
+    if not (event.char.isdigit() or event.char == ":") and event.char != "":
+        return "break"
+
+    # Evitar más de 5 caracteres
+    if len(texto) >= 5 and event.char.isdigit():
+        return "break"
+
+
+# Función para validar el contenido del campo, permitiendo solo números y ':'
+def solo_numeros(event):
+    texto = entry_horario.get()
+
+    # Permitir siempre la eliminación
+    if event.keysym == 'BackSpace':
+        return
+
+    # Validar que solo se puedan ingresar números y el ':'
+    if not (event.char.isdigit() or event.char == ":") and event.char != "":
+        return "break"
+
+    # Evitar más de 5 caracteres
+    if len(texto) >= 5 and event.char.isdigit():
+        return "break"
+
+# Función para validar el horario cuando se confirma la entrada
+def validar_entrada():
+    horario = entry_horario.get()
+    if validar_horario(horario):
+        messagebox.showinfo("Horario válido", f"El horario ingresado es: {horario}")
+    else:
+        messagebox.showerror("Error", "El horario no es válido. Debe estar entre las 7:45 y las 21:50")
+
+# Validar formato de horario (HH:MM)
+def validar_horario(horario):
+    try:
+        hora, minuto = map(int, horario.split(":"))
+        return 7 <= hora <= 21 and (hora != 21 or minuto <= 50)
+    except ValueError:
+        return False
+    
+    
+vcmd = (ventana.register(validate_integer_input), '%P')
+#entry = tk.Entry(ventana, validate='key', validatecommand=vcmd)
+#entry.grid(column=0, row=3, padx=40, pady=1)
+
+Legajo = tk.Label(ventana, text="Numero de legajo:")
+Legajo.grid(column=0, row=2, pady=15)
+Legajo = tk.Entry(ventana, validate='key', validatecommand=vcmd, textvariable=Legajo)
+Legajo.grid(column=0, row=3, padx=40, pady=1)
+
+Fecha = tk.Label(ventana, text="Fecha de nacimiento:").grid(column=1, row=2,padx=35)
+today = datetime.now()
+max_date = today - timedelta(days=365 * 18+4)
+Fecha = DateEntry(ventana, selectmode="day", year=2000, month=1, day=1,date_pattern="yyyy/mm/dd",width=15, mindate=None,maxdate=max_date,state="readonly")
+Fecha.grid(column=1, row=3,padx=35)
+
+hora_entrada = tk.Label(ventana, text = "Hora de Entrada:")
+hora_entrada.grid(column=2, row=2)
+horarios=[]
+with open('horario.txt', 'r') as archivo:
+    for linea in archivo:
+        hora, minuto = linea.strip().split(':')
+        hora = int(hora)
+        minuto = int(minuto)
+        horarios.append((f"{hora:02d}:{minuto:02d}"))
+hora_llegada1 = ttk.Combobox(ventana, values=horarios, state="readonly")
+hora_llegada1.grid(column=2, row=3, padx=20)         
+
+hora_entrada = tk.Label(ventana, text = "Hora de Entrada:")
+hora_entrada.grid(column=2, row=2)
+horarios=[]
+with open('horario.txt', 'r') as archivo:
+    for linea in archivo:
+        hora, minuto = linea.strip().split(':')
+        hora = int(hora)
+        minuto = int(minuto)
+        horarios.append((f"{hora:02d}:{minuto:02d}"))
+hora_entrada1 = ttk.Combobox(ventana, values=horarios, state="readonly")
+hora_entrada1.grid(column=2, row=3, padx=20)   
+
+
+hora_llegada = tk.Label(ventana, text = "Hora de LLegada:")
+hora_llegada.grid(column=3, row=2)
+horarios=[]
+with open('horario.txt', 'r') as archivo:
+    for linea in archivo:
+        hora, minuto = linea.strip().split(':')
+        hora = int(hora)
+        minuto = int(minuto)
+        horarios.append((f"{hora:02d}:{minuto:02d}"))
+hora_llegada1 = ttk.Combobox(ventana, values=horarios, state="readonly")
+hora_llegada1.grid(column=3, row=3, padx=20)  
+
+# Función para crear un Combobox con Scrollbar
+class ComboboxConScrollbar(ttk.Combobox):
+    def __init__(self, master=None, **kwargs):
+        super().__init__(master, **kwargs)
+
+        # Crear el menú de lista extendida
+        self.lista_menu = tk.Menu(self, tearoff=0)
+        self.lista_scrollbar = tk.Scrollbar(master)
+        self.lista_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Asociar la lista al Combobox
+        self.lista_menu.add_cascade(label="Scrollable List")
+
+# Opciones de "Llegada Tarde"
+Opclleg = [
+    "5 Minutos", "10 Minutos", "15 Minutos", "20 Minutos", 
+    "25 Minutos", "30 Minutos", "35 Minutos", "40 Minutos", 
+    "45 Minutos", "50 Minutos", "1 hora", "2 horas", "3 horas", "4 horas"
+]
+
+llegada_tarde = tk.Label(ventana, text="Llegada Tarde:")
+llegada_tarde.grid(column=4, row=2)
+
+llegada_tarde1 = ttk.Combobox(ventana, values=Opclleg, state="readonly")
+llegada_tarde1.grid(column=4, row=3, padx=20)
+
+
+just = tk.Label(ventana, text="Justificado : ")
+just.grid(column=5, row=2)
+Opcjust= ["Sí ", "No "]
+just1 = ttk.Combobox(ventana, values=Opcjust, state="readonly")
+just1.grid(column=5, row=3, padx=20) 
+
+tipo_just = tk.Label(ventana, text = "Tipo de Justificado")
+tipo_just.grid(column=0, row=4, pady=20)
+tipo_just1 = tk.Entry(ventana, textvariable=tipo_just)
+tipo_just1.grid(column=0, row=5)
+
+
+entry_horario = tk.Entry(ventana, textvariable=retiro)
+
+# Asociar las funciones de validación y formateo
+entry_horario.bind('<KeyPress>', solo_numeros)
+entry_horario.bind('<KeyRelease>', solo_numeros)
+entry_horario.grid(column=1, row=5)
+entry_horario= tk.Label(ventana, text= "Retiro :")
+entry_horario.grid(column=1, row=4)
+vcme = (ventana.register(solo_numeros), '%S')
+entry_horario = tk.Entry(ventana, textvariable=retiro, validate='key', validatecommand=vcme)
+entry_horario.grid(column=1, row=5)
+entry_horario.bind('<KeyRelease>', solo_numeros)
+
+
+frame_botones = tk.Frame(ventana)
+frame_botones.place(relx=1, rely=0.01, anchor='ne')
+
+boton_ver_asistencia = tk.Button(frame_botones, text="Reiniciar", command=reiniciar, width=15, height=2)
+boton_ver_asistencia.pack(side=tk.TOP)
+
+boton_ver_asistencia = tk.Button(frame_botones, text="Volver", command=volver,width=15, height=2, bg="red")
+boton_ver_asistencia.pack(side=tk.TOP)
+
+boton_ver_asistencia = tk.Button(frame_botones, text="Cargar", command=cargar, width=15, height=2)
+boton_ver_asistencia.pack(side=tk.TOP)
+
+
+marcoAgregarAlumnos = tk.LabelFrame(ventana)
+marcoAgregarAlumnos.place(x=1, y=300, width=1370, height=445)
+
+# Crear el Treeview
+tvtAgregaralumnos = ttk.Treeview(marcoAgregarAlumnos, columns=(
+    "id", "Num_legajo", "Fecha", "Hora_entrada", "Horario_llegada", "Llegada_tarde", 
+    "Justificado", "Tipo_justificacion", "Retiro", "Inasistencia", 
+), show="headings")
+
+# Configuración de los encabezados
+tvtAgregaralumnos.heading("id", text="ID")
+tvtAgregaralumnos.heading("Num_legajo", text="Número de Legajo")
+tvtAgregaralumnos.heading("Fecha", text="Fecha")
+tvtAgregaralumnos.heading("Hora_entrada", text="Hora de Entrada")
+tvtAgregaralumnos.heading("Horario_llegada", text="Hora de Llegada")
+tvtAgregaralumnos.heading("Llegada_tarde", text="Llegada Tarde")
+tvtAgregaralumnos.heading("Justificado", text="Justificado")
+tvtAgregaralumnos.heading("Tipo_justificacion", text="Tipo de Justificación")
+tvtAgregaralumnos.heading("Retiro", text="Retiro")
+tvtAgregaralumnos.heading("Inasistencia",text="Inasistencia" )
+
+# Configuración de tamaño de columnas
+tvtAgregaralumnos.column("id", width=120)
+tvtAgregaralumnos.column("Num_legajo", width=100)
+tvtAgregaralumnos.column("Fecha", width=100)
+tvtAgregaralumnos.column("Hora_entrada", width=80)
+tvtAgregaralumnos.column("Horario_llegada", width=80)
+tvtAgregaralumnos.column("Llegada_tarde", width=100)
+tvtAgregaralumnos.column("Justificado", width=80)
+tvtAgregaralumnos.column("Tipo_justificacion", width=150)
+tvtAgregaralumnos.column("Retiro", width=100)
+tvtAgregaralumnos.column("Inasistencia", width=100)
+
+scrollbar_vertical = ttk.Scrollbar(marcoAgregarAlumnos, orient="vertical", command=tvtAgregaralumnos.yview)
+scrollbar_horizontal = ttk.Scrollbar(marcoAgregarAlumnos, orient="horizontal", command=tvtAgregaralumnos.xview)
+tvtAgregaralumnos.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
+
+# Posicionar el Treeview y los Scrollbars
+tvtAgregaralumnos.grid(row=0, column=0, sticky="nsew")
+scrollbar_vertical.grid(row=0, column=1, sticky="ns")
+scrollbar_horizontal.grid(row=1, column=0, sticky="ew")
+
+# Configurar grid para expandirse
+marcoAgregarAlumnos.grid_rowconfigure(0, weight=1)
+marcoAgregarAlumnos.grid_columnconfigure(0, weight=1)
+
+
+ventana.mainloop()
+
+
+# Configurar grid para expandirse
+marcoAgregarAlumnos.grid_rowconfigure(0, weight=1)
+marcoAgregarAlumnos.grid_columnconfigure(0, weight=1)
+
+
+ventana.mainloop()
